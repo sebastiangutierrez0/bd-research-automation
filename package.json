@@ -1,0 +1,9 @@
+{
+  "name": "bd-research-automation",
+  "private": true,
+  "scripts": {
+    "setup": "npm install --prefix frontend",
+    "dev": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend"
+  }
+}
