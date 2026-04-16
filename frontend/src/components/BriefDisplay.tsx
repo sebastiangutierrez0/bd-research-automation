@@ -33,7 +33,7 @@ export function BriefDisplay({ content }: BriefDisplayProps) {
     <Card className="flex min-h-[320px] max-h-[min(75vh,56rem)] w-full flex-col border-navy-700/80 bg-white shadow-card-lg">
       <CardHeader className="flex flex-row shrink-0 items-center justify-between space-y-0 border-b border-slate-200 px-5 py-4">
         <CardTitle className="text-base font-semibold text-navy-950">
-          Intelligence brief
+          Intelligence Brief
         </CardTitle>
         <Button
           type="button"

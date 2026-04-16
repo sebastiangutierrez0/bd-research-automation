@@ -102,7 +102,7 @@ export function ResearchHistory({
           className="border-red-500/30 bg-red-950/30 text-red-100"
         >
           <AlertDescription>
-            Research history could not be loaded: {error}
+            Research History could not be loaded: {error}
           </AlertDescription>
         </Alert>
       </section>
@@ -128,7 +128,7 @@ export function ResearchHistory({
   if (groups.length === 0) {
     return (
       <section className="mt-10 rounded-xl border border-navy-700/80 bg-navy-900/40 px-6 py-10 text-center text-sm text-slate-500 shadow-card">
-        No research history yet
+        No Research History Yet
       </section>
     );
   }

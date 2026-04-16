@@ -33,7 +33,7 @@ export function EmailDisplay({ content }: EmailDisplayProps) {
     <Card className="flex w-full flex-col border-navy-700/80 bg-white shadow-card-lg">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-slate-200 px-5 py-4">
         <CardTitle className="text-base font-semibold text-navy-950">
-          Outreach email
+          Outreach Email
         </CardTitle>
         <Button
           type="button"

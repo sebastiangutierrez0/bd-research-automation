@@ -5,7 +5,7 @@ import type {
   FormEvent,
   SetStateAction,
 } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,12 +19,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 export type TargetType = "Institutional Investor" | "Target Company";
 
+export type ResearchMode = "single" | "bulk";
+
 const MAX_CONTEXT_CHARS = 32000;
 
+/** Short placeholder — full guidance is in the helper line below */
+const TARGET_LIST_PLACEHOLDER = "CalPERS\nBlackRock\nVanguard";
+
 type SearchFormProps = {
+  mode: ResearchMode;
+  onModeChange: (mode: ResearchMode) => void;
+  targetList: string;
+  onTargetListChange: (value: string) => void;
+  onBulkSubmit: () => void;
+  bulkSubmitting: boolean;
   outreachEffort: string;
   outreachContext: string;
   targetName: string;
@@ -57,7 +69,20 @@ function appendImportedContext(
 const fieldClass =
   "border-navy-600 bg-white text-navy-950 shadow-sm ring-primary/30 placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary";
 
+function parseTargetLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export function SearchForm({
+  mode,
+  onModeChange,
+  targetList,
+  onTargetListChange,
+  onBulkSubmit,
+  bulkSubmitting,
   outreachEffort,
   outreachContext,
   targetName,
@@ -72,11 +97,31 @@ export function SearchForm({
   const [dragOver, setDragOver] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
+  const targetListRef = useRef<HTMLTextAreaElement>(null);
+
+  /** Grow the bulk target list with content; cap height so long lists scroll inside. */
+  useEffect(() => {
+    if (mode !== "bulk") return;
+    const el = targetListRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const maxPx = Math.min(
+      typeof window !== "undefined" ? window.innerHeight * 0.45 : 400,
+      448
+    );
+    el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
+  }, [mode, targetList]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!submitting && targetName.trim() && outreachEffort.trim()) {
-      onSubmit();
+    if (mode === "single") {
+      if (!submitting && targetName.trim() && outreachEffort.trim()) {
+        onSubmit();
+      }
+      return;
+    }
+    if (!bulkSubmitting && outreachEffort.trim() && parseTargetLines(targetList).length > 0) {
+      onBulkSubmit();
     }
   }
 
@@ -141,13 +186,49 @@ export function SearchForm({
     await processContextFile(file);
   }
 
-  const canSubmit = Boolean(targetName.trim() && outreachEffort.trim());
+  const canSubmitSingle = Boolean(targetName.trim() && outreachEffort.trim());
+  const canSubmitBulk = Boolean(
+    outreachEffort.trim() && parseTargetLines(targetList).length > 0
+  );
+  const bulkTargetCount = parseTargetLines(targetList).length;
 
   return (
     <form
       onSubmit={handleSubmit}
       className="rounded-xl border border-navy-700/80 bg-navy-900/60 p-6 shadow-card-lg backdrop-blur"
     >
+      <div className="mb-6">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+          Research Mode
+        </p>
+        <div className="grid max-w-lg grid-cols-2 gap-0 rounded-lg border border-navy-600/90 bg-navy-950/50 p-1">
+          <button
+            type="button"
+            onClick={() => onModeChange("single")}
+            className={cn(
+              "rounded-md px-3 py-2.5 text-sm font-medium transition",
+              mode === "single"
+                ? "bg-primary text-white shadow-sm"
+                : "text-slate-400 hover:bg-navy-800/80 hover:text-slate-200"
+            )}
+          >
+            Single Target
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange("bulk")}
+            className={cn(
+              "rounded-md px-3 py-2.5 text-sm font-medium transition",
+              mode === "bulk"
+                ? "bg-primary text-white shadow-sm"
+                : "text-slate-400 hover:bg-navy-800/80 hover:text-slate-200"
+            )}
+          >
+            Bulk Research
+          </button>
+        </div>
+      </div>
+
       <div className="mb-4">
         <Label
           htmlFor="outreach-effort"
@@ -201,7 +282,7 @@ export function SearchForm({
               </p>
             </div>
             <label className="shrink-0 cursor-pointer rounded-lg border border-navy-500 bg-navy-800/90 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-sm transition hover:border-primary hover:bg-navy-700">
-              Browse files
+              Browse Files
               <input
                 type="file"
                 accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
@@ -262,52 +343,133 @@ export function SearchForm({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-end">
-        <div className="flex-1">
-          <Label htmlFor="target-name" className="mb-1.5 block text-slate-300">
-            Target name
-          </Label>
-          <Input
-            id="target-name"
-            type="text"
-            value={targetName}
-            onChange={(e) => onTargetNameChange(e.target.value)}
-            placeholder="e.g., CalPERS or Acme Corp"
-            autoComplete="off"
-            name="target-name"
-            className={`h-auto min-h-[42px] py-2.5 ${fieldClass}`}
-          />
-        </div>
-        <div className="w-full md:w-64">
-          <Label htmlFor="target-type" className="mb-1.5 block text-slate-300">
-            Target type
-          </Label>
-          <Select
-            value={targetType}
-            onValueChange={(v) => onTargetTypeChange(v as TargetType)}
-          >
-            <SelectTrigger
-              id="target-type"
+      {mode === "single" ? (
+        <div className="flex flex-col gap-4 md:flex-row md:items-end">
+          <div className="min-w-0 flex-1">
+            <Label htmlFor="target-name" className="mb-1.5 block text-slate-300">
+              Target Name
+            </Label>
+            <Input
+              id="target-name"
+              type="text"
+              value={targetName}
+              onChange={(e) => onTargetNameChange(e.target.value)}
+              placeholder="e.g., CalPERS or Acme Corp"
+              autoComplete="off"
+              name="target-name"
               className={`h-auto min-h-[42px] py-2.5 ${fieldClass}`}
+            />
+          </div>
+          <div className="w-full md:w-64">
+            <Label htmlFor="target-type" className="mb-1.5 block text-slate-300">
+              Target Type
+            </Label>
+            <Select
+              value={targetType}
+              onValueChange={(v) => onTargetTypeChange(v as TargetType)}
             >
-              <SelectValue placeholder="Target type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Institutional Investor">
-                Institutional Investor
-              </SelectItem>
-              <SelectItem value="Target Company">Target Company</SelectItem>
-            </SelectContent>
-          </Select>
+              <SelectTrigger
+                id="target-type"
+                className={`h-auto min-h-[42px] py-2.5 ${fieldClass}`}
+              >
+                <SelectValue placeholder="Target Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Institutional Investor">
+                  Institutional Investor
+                </SelectItem>
+                <SelectItem value="Target Company">Target Company</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="submit"
+            disabled={submitting || !canSubmitSingle}
+            className="h-[42px] shrink-0 px-6 font-semibold shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            Generate
+          </Button>
         </div>
-        <Button
-          type="submit"
-          disabled={submitting || !canSubmit}
-          className="h-[42px] shrink-0 px-6 font-semibold shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
-          Generate
-        </Button>
-      </div>
+      ) : (
+        <div className="flex flex-col gap-5">
+          <div>
+            <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
+              <Label
+                htmlFor="target-list"
+                className="text-slate-300"
+              >
+                Target List
+              </Label>
+              {bulkTargetCount > 0 ? (
+                <span className="text-xs font-medium tabular-nums text-slate-500">
+                  {bulkTargetCount}{" "}
+                  {bulkTargetCount === 1 ? "target" : "targets"}
+                </span>
+              ) : null}
+            </div>
+            <p className="mb-2 text-xs leading-relaxed text-slate-500">
+              Paste from a spreadsheet or type one organization per line. Empty
+              lines are ignored.
+            </p>
+            <div className="overflow-hidden rounded-lg border border-navy-600 bg-white shadow-inner ring-1 ring-black/5">
+              <Textarea
+                ref={targetListRef}
+                id="target-list"
+                value={targetList}
+                onChange={(e) => onTargetListChange(e.target.value)}
+                placeholder={TARGET_LIST_PLACEHOLDER}
+                name="target-list"
+                rows={3}
+                spellCheck={false}
+                className={cn(
+                  "min-h-[3.25rem] max-h-[min(45vh,28rem)] w-full resize-y overflow-y-auto border-0 bg-transparent px-3 py-2.5",
+                  "font-mono text-[13px] leading-normal text-navy-950",
+                  "placeholder:font-sans placeholder:text-slate-400",
+                  "outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+                )}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 border-t border-navy-700/60 pt-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="w-full sm:max-w-xs">
+              <Label htmlFor="target-type" className="mb-1.5 block text-slate-300">
+                Target Type
+              </Label>
+              <p className="mb-2 text-xs text-slate-500 sm:hidden">
+                Applies to every line in the list above.
+              </p>
+              <p className="mb-2 hidden text-xs text-slate-500 sm:block">
+                Applies to all targets in the list.
+              </p>
+              <Select
+                value={targetType}
+                onValueChange={(v) => onTargetTypeChange(v as TargetType)}
+              >
+                <SelectTrigger
+                  id="target-type"
+                  className={`h-auto min-h-[42px] py-2.5 ${fieldClass}`}
+                >
+                  <SelectValue placeholder="Target Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Institutional Investor">
+                    Institutional Investor
+                  </SelectItem>
+                  <SelectItem value="Target Company">Target Company</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="submit"
+              disabled={bulkSubmitting || !canSubmitBulk}
+              className="h-[42px] w-full shrink-0 px-6 font-semibold shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:w-auto"
+            >
+              Run Bulk Research
+            </Button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
