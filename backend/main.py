@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+import httpx
 
 from ai_client import generate_brief_and_email
 from airtable_client import get_history_grouped, log_to_airtable
@@ -103,13 +104,42 @@ def _execute_research(body: ResearchRequest) -> ResearchResponse:
 def run_research_pipeline(body: ResearchRequest) -> ResearchResponse:
     """POST /research — same behavior as before, HTTP errors for API client."""
     try:
-        return _execute_research(body)
+        result = _execute_research(body)
+        _send_make_webhook(
+            target_name=body.target_name,
+            target_type=body.target_type,
+            outreach_effort=body.outreach_effort,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+        return result
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 def _sse_chunk(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def _send_make_webhook(
+    target_name: str, target_type: str, outreach_effort: str, timestamp: str
+) -> None:
+    # TODO: Add MAKE_WEBHOOK_URL to backend/.env
+    webhook_url = os.getenv("MAKE_WEBHOOK_URL")
+    if not webhook_url:
+        return
+
+    payload = {
+        "target_name": target_name,
+        "target_type": target_type,
+        "outreach_effort": outreach_effort,
+        "timestamp": timestamp,
+    }
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            client.post(webhook_url, json=payload).raise_for_status()
+    except Exception as e:
+        logger.warning("Make webhook notification failed: %s", e)
 
 
 def _notify_bulk_complete_internal(summary: dict) -> None:
@@ -191,6 +221,12 @@ def bulk_research(body: BulkResearchRequest):
 
             try:
                 result = _execute_research(req)
+                _send_make_webhook(
+                    target_name=target_name,
+                    target_type=body.target_type,
+                    outreach_effort=body.outreach_effort,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                )
                 yield _sse_chunk(
                     "result",
                     {
