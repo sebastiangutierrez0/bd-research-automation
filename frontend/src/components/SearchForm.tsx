@@ -423,8 +423,8 @@ export function SearchForm({
                 spellCheck={false}
                 className={cn(
                   "min-h-[3.25rem] max-h-[min(45vh,28rem)] w-full resize-y overflow-y-auto border-0 bg-transparent px-3 py-2.5",
-                  "font-mono text-[13px] leading-normal text-navy-950",
-                  "placeholder:font-sans placeholder:text-slate-400",
+                  "text-sm leading-relaxed text-navy-950",
+                  "placeholder:text-slate-400",
                   "outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
                 )}
               />
