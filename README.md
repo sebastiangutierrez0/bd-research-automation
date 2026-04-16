@@ -1,8 +1,8 @@
 # BD Research Automation
 
-Web app for an investment firm’s Business Development team: describe an outreach effort and target (institutional investor or company), run automated web research (Tavily), generate a brief and outreach email (Claude), and log runs to Airtable.
+Web app for an investment firm’s Business Development team: describe an outreach effort and target (institutional investor or company), run automated web research (Tavily), generate a brief and outreach email (Claude), and log runs to Airtable. Supports **bulk research** (many targets, one campaign) with a Server-Sent Events stream, and optional **Make** webhooks to trigger email or other automation after each successful generation.
 
-**Stack:** React + TypeScript + Tailwind (Vite) · FastAPI · Tavily · Anthropic Claude · Airtable
+**Stack:** React + TypeScript + Tailwind (Vite) · FastAPI · Tavily · Anthropic Claude · Airtable · optional [Make](https://www.make.com) (HTTP webhook)
 
 | Area | Path | Dev URL |
 |------|------|---------|
@@ -69,7 +69,11 @@ Health: [http://localhost:8000/health](http://localhost:8000/health)
 
 **Optional**
 
-No additional AI provider env vars are required right now. The model is configured in code (`backend/ai_client.py`).
+| Variable | Purpose |
+|----------|---------|
+| `MAKE_WEBHOOK_URL` | HTTPS URL of a Make (or any service that accepts JSON POSTs) **webhook module**. When set, the API POSTs a small JSON payload after each **successful** research: once for `POST /research`, and once per successful target in `POST /bulk-research`. Payload fields: `target_name`, `target_type`, `outreach_effort`, `timestamp` (ISO 8601 UTC). Leave unset to disable. |
+
+The model name is set in code (`backend/ai_client.py`); no extra AI provider environment variables are required beyond `ANTHROPIC_API_KEY`.
 
 Do not commit real secrets. The app uses one Claude call per generate (brief + email together) via `claude-sonnet-4-5` in `backend/ai_client.py`.
 
@@ -102,9 +106,9 @@ The UI can attach **.pdf** / **.docx**; text is extracted in the browser into **
 |--------|------|---------------|
 | `GET` | `/health` | `{"status":"ok"}` |
 | `GET` | `/history` | Records grouped by **Outreach Effort** (recent first); entries include `outreach_context` when stored |
-| `POST` | `/research` | Body: `outreach_effort`, `target_name`, `target_type`; optional `outreach_context`. Search + one Claude call + Airtable; returns `brief`, `email` |
-| `POST` | `/bulk-research` | Multiple targets; SSE stream (`progress`, `result`, `error`, `done`). Same fields as `/research` plus `targets` list |
-| `POST` | `/notify` | Accepts bulk-run summary (same shape as final SSE `done` event); hook for automation — secure before production |
+| `POST` | `/research` | Body: `outreach_effort`, `target_name`, `target_type`; optional `outreach_context`. Search + one Claude call + Airtable; returns `brief`, `email`. If `MAKE_WEBHOOK_URL` is set, notifies the webhook after success. |
+| `POST` | `/bulk-research` | Multiple targets; SSE stream (`progress`, `result`, `error`, `done`). Same campaign fields as `/research` plus `targets` list. Notifies the webhook after each successful target when `MAKE_WEBHOOK_URL` is set. Final `done` event carries a bulk summary (`outreach_effort`, `total_targets`, `target_names`, `timestamp`). |
+| `POST` | `/notify` | Accepts that bulk summary payload (same JSON as the final SSE `done` event) for external automation (e.g. a flow that emails a recap). Does not send email by itself — secure before exposing publicly |
 
 ---
 
@@ -117,7 +121,7 @@ docker compose up --build
 ```
 
 - UI: http://localhost:3000 · API: http://localhost:8000  
-- Put secrets in **`backend/.env`** (loaded when present).  
+- Put secrets in **`backend/.env`** (loaded when present), including optional `MAKE_WEBHOOK_URL` if you use Make.  
 - Build-time `VITE_API_BASE` for a non-default API URL, e.g.  
   `$env:VITE_API_BASE="https://api.example.com"; docker compose up --build`  
 - CORS for the API is configured in `backend/main.py` (e.g. `http://localhost:3000`); adjust `allow_origins` if the UI is hosted elsewhere.
@@ -126,10 +130,19 @@ docker compose up --build
 
 ## Flow
 
+**Single target**
+
 1. `POST /research` with effort, target, optional context.  
-2. Backend: Tavily for the **target**, then **one** Claude call (`generate_brief_and_email` in `ai_client.py`) using context + search results; write Airtable row.  
+2. Backend: Tavily for the **target**, then **one** Claude call (`generate_brief_and_email` in `ai_client.py`) using context + search results; write Airtable row; optionally POST to `MAKE_WEBHOOK_URL`.  
 3. Frontend refreshes history via `GET /history`.  
-4. To swap Claude for another provider, update `backend/ai_client.py`.
+
+**Bulk**
+
+1. `POST /bulk-research` with shared effort, context, and a `targets` list.  
+2. Backend runs the same pipeline per target (with a short delay between targets), streams SSE, fires the Make webhook after each success, then emits `done` with a summary (also logged server-side).  
+3. A separate client or automation can `POST` that summary to `/notify` if you want a server-side hook for end-of-run actions.
+
+To swap Claude for another provider, update `backend/ai_client.py`.
 
 ---
 
@@ -147,4 +160,5 @@ docker compose up --build
 ## Security
 
 - Keep `backend/.env` out of version control (see `.gitignore`).  
-- Load secrets via environment / dotenv, not hard-coded keys.
+- Load secrets via environment / dotenv, not hard-coded keys.  
+- `MAKE_WEBHOOK_URL` can trigger downstream automation; treat it like a secret and restrict who can change your Make scenario.
