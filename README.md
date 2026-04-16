@@ -1,8 +1,8 @@
 # BD Research Automation
 
-Web app for an investment firm’s Business Development team: describe an outreach effort and target (institutional investor or company), run automated web research (Tavily), generate a brief and outreach email (Gemini), and log runs to Airtable.
+Web app for an investment firm’s Business Development team: describe an outreach effort and target (institutional investor or company), run automated web research (Tavily), generate a brief and outreach email (Claude), and log runs to Airtable.
 
-**Stack:** React + TypeScript + Tailwind (Vite) · FastAPI · Tavily · Google Gemini · Airtable
+**Stack:** React + TypeScript + Tailwind (Vite) · FastAPI · Tavily · Anthropic Claude · Airtable
 
 | Area | Path | Dev URL |
 |------|------|---------|
@@ -16,7 +16,7 @@ Web app for an investment firm’s Business Development team: describe an outrea
 ## Prerequisites
 
 - **Node.js** 18+, **Python** 3.11+ (3.12 recommended if wheels fail on newer Python)
-- API keys: [Google AI Studio](https://aistudio.google.com/apikey) (Gemini), [Tavily](https://tavily.com), [Airtable](https://airtable.com) (token + base + table)
+- API keys: [Anthropic Console](https://console.anthropic.com/settings/keys) (Claude), [Tavily](https://tavily.com), [Airtable](https://airtable.com) (token + base + table)
 
 ---
 
@@ -59,7 +59,7 @@ Health: [http://localhost:8000/health](http://localhost:8000/health)
 
 | Variable | Purpose |
 |----------|---------|
-| `GEMINI_API_KEY` | Gemini |
+| `ANTHROPIC_API_KEY` | Claude |
 | `TAVILY_API_KEY` | Web search |
 | `AIRTABLE_API_KEY` | Personal access token (`data.records:read` + `write`) |
 | `AIRTABLE_BASE_ID` | Base ID (Airtable API docs for your base) |
@@ -69,13 +69,9 @@ Health: [http://localhost:8000/health](http://localhost:8000/health)
 
 **Optional**
 
-| Variable | Default / notes |
-|----------|-----------------|
-| `GEMINI_MODEL` | `gemini-2.5-flash` |
-| `GEMINI_MAX_RETRIES` | `6` (429 / quota) |
-| `GEMINI_MIN_SECONDS_BETWEEN_CALLS` | `12` (spacing for free tier; `0` to disable) |
+No additional AI provider env vars are required right now. The model is configured in code (`backend/ai_client.py`).
 
-Do not commit real secrets. The app uses one Gemini call per generate (brief + email together); see [Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) if you need higher throughput.
+Do not commit real secrets. The app uses one Claude call per generate (brief + email together) via `claude-sonnet-4-5` in `backend/ai_client.py`.
 
 ---
 
@@ -106,7 +102,7 @@ The UI can attach **.pdf** / **.docx**; text is extracted in the browser into **
 |--------|------|---------------|
 | `GET` | `/health` | `{"status":"ok"}` |
 | `GET` | `/history` | Records grouped by **Outreach Effort** (recent first); entries include `outreach_context` when stored |
-| `POST` | `/research` | Body: `outreach_effort`, `target_name`, `target_type`; optional `outreach_context`. Search + one Gemini call + Airtable; returns `brief`, `email` |
+| `POST` | `/research` | Body: `outreach_effort`, `target_name`, `target_type`; optional `outreach_context`. Search + one Claude call + Airtable; returns `brief`, `email` |
 | `POST` | `/bulk-research` | Multiple targets; SSE stream (`progress`, `result`, `error`, `done`). Same fields as `/research` plus `targets` list |
 | `POST` | `/notify` | Accepts bulk-run summary (same shape as final SSE `done` event); hook for automation — secure before production |
 
@@ -131,9 +127,9 @@ docker compose up --build
 ## Flow
 
 1. `POST /research` with effort, target, optional context.  
-2. Backend: Tavily for the **target**, then **one** Gemini call (`generate_brief_and_email` in `ai_client.py`) using context + search results; write Airtable row.  
+2. Backend: Tavily for the **target**, then **one** Claude call (`generate_brief_and_email` in `ai_client.py`) using context + search results; write Airtable row.  
 3. Frontend refreshes history via `GET /history`.  
-4. To swap Gemini for another provider, see the comment block at the top of `backend/ai_client.py`.
+4. To swap Claude for another provider, update `backend/ai_client.py`.
 
 ---
 

@@ -3,6 +3,6 @@ uvicorn[standard]==0.32.1
 python-dotenv==1.0.1
 # pydantic 2.13+ pulls pydantic-core wheels for Python 3.14 on Windows; older pins may try to build from source (needs Rust/MSVC).
 pydantic>=2.13.0,<3
-google-generativeai==0.8.3
+anthropic
 httpx==0.28.1
 pyairtable==3.0.1

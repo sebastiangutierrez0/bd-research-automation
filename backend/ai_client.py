@@ -1,117 +1,30 @@
 """
-AI text generation via Google Gemini (google-generativeai).
+AI text generation via Anthropic Claude (anthropic).
 
-SWAPPING TO CLAUDE (Anthropic):
---------------------------------
-1. Remove or stop importing `google.generativeai` and remove `google-generativeai`
-   from requirements.txt; add `anthropic` instead.
-2. Replace the implementation of `generate_content(prompt: str) -> str` below to
-   call Anthropic's Messages API (e.g. `anthropic.Anthropic().messages.create(...)`)
-   with your chosen Claude model.
-3. Read the API key from an environment variable such as `ANTHROPIC_API_KEY` using
-   `os.getenv()`, with a TODO comment next to it — do not hardcode keys.
-4. Map the Claude response text to a plain `str` return value so callers in `main.py`
-   stay unchanged.
-5. Optionally rename this file to `ai_client.py` still, or keep the same module name
-   so `main.py` imports do not need to change beyond the internal implementation.
-
-The rest of the app (Tavily search, Airtable logging, FastAPI routes) should remain the same.
-
-FREE TIER: This module uses one generate_content call per research run (brief + email in one
-response) and spaces out Gemini calls using GEMINI_MIN_SECONDS_BETWEEN_CALLS (default 12s)
-to stay within typical free-tier per-minute limits.
+Claude is now the active provider for this module and Gemini has been removed.
 """
 
 from __future__ import annotations
 
 import os
 import re
-import threading
-import time
 
-import google.generativeai as genai
-
-try:
-    from google.api_core import exceptions as google_api_exceptions
-except ImportError:
-    google_api_exceptions = None  # type: ignore[assignment]
-
-_lock = threading.Lock()
-_last_gemini_monotonic: float = 0.0
-
-
-def _is_quota_or_rate_limit(exc: BaseException) -> bool:
-    if google_api_exceptions is not None:
-        if isinstance(
-            exc,
-            (
-                google_api_exceptions.ResourceExhausted,
-                google_api_exceptions.TooManyRequests,
-            ),
-        ):
-            return True
-    msg = str(exc).lower()
-    return (
-        "429" in msg
-        or "quota" in msg
-        or "rate limit" in msg
-        or "resource exhausted" in msg
-    )
-
-
-def _retry_delay_seconds(exc: BaseException) -> float:
-    msg = str(exc)
-    m = re.search(r"retry in ([\d.]+)\s*s", msg, re.I)
-    if m:
-        return min(float(m.group(1)) + 0.25, 120.0)
-    m = re.search(r"retry_delay\s*\{[^}]*seconds:\s*(\d+)", msg)
-    if m:
-        return min(float(m.group(1)) + 0.25, 120.0)
-    return 2.0
-
-
-def _throttle_free_tier_spacing() -> None:
-    """
-    Space out Gemini generate_content calls. Free tier is often ~5 requests/minute per model;
-    12s between calls keeps a safe margin. Set GEMINI_MIN_SECONDS_BETWEEN_CALLS=0 to disable.
-    """
-    # TODO: Optional — tune in backend/.env (default 12 keeps under ~5 RPM free tier)
-    raw = os.getenv("GEMINI_MIN_SECONDS_BETWEEN_CALLS", "12")
-    try:
-        min_seconds = float(raw)
-    except ValueError:
-        min_seconds = 12.0
-    if min_seconds <= 0:
-        return
-
-    global _last_gemini_monotonic
-    with _lock:
-        now = time.monotonic()
-        wait = min_seconds - (now - _last_gemini_monotonic)
-        if wait > 0:
-            time.sleep(wait)
-        _last_gemini_monotonic = time.monotonic()
+import anthropic
 
 
 def _response_to_text(response: object) -> str:
-    if not getattr(response, "candidates", None):
-        raise RuntimeError("Gemini returned no candidates for the prompt.")
-
-    text = getattr(response, "text", None)
-    if text:
-        return text.strip()
+    content = getattr(response, "content", None)
+    if not content:
+        raise RuntimeError("Claude returned no content for the prompt.")
 
     parts: list[str] = []
-    for cand in response.candidates:
-        content = getattr(cand, "content", None)
-        if not content:
-            continue
-        for part in getattr(content, "parts", []) or []:
-            ptext = getattr(part, "text", None)
-            if ptext:
-                parts.append(ptext)
+    for block in content:
+        btext = getattr(block, "text", None)
+        if btext:
+            parts.append(btext)
+
     if not parts:
-        raise RuntimeError("Gemini returned no text content.")
+        raise RuntimeError("Claude returned no text content.")
     return "\n".join(parts).strip()
 
 
@@ -180,20 +93,14 @@ def generate_brief_and_email(
     firm_name: str,
     outreach_context: str = "",
 ) -> tuple[str, str]:
-    """
-    One Gemini generate_content call: brief + email, formatted for free-tier limits.
-    """
-    # TODO: Add your Gemini API key to the .env file as GEMINI_API_KEY=...
-    api_key = os.getenv("GEMINI_API_KEY")
+    # TODO: Add your Claude API key to backend/.env as ANTHROPIC_API_KEY=...
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise ValueError(
-            "GEMINI_API_KEY is not set. Add it to backend/.env (see TODO in ai_client.py)."
+            "ANTHROPIC_API_KEY is not set. Add it to backend/.env (see TODO in ai_client.py)."
         )
 
-    genai.configure(api_key=api_key)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    model = genai.GenerativeModel(model_name)
-
+    client = anthropic.Anthropic(api_key=api_key)
     prompt = _build_combined_prompt(
         target_name,
         search_blob,
@@ -202,70 +109,27 @@ def generate_brief_and_email(
         outreach_context,
     )
 
-    _throttle_free_tier_spacing()
-
-    max_attempts = int(os.getenv("GEMINI_MAX_RETRIES", "6"))
-    attempt = 0
-    last_exc: BaseException | None = None
-
-    while attempt < max_attempts:
-        try:
-            response = model.generate_content(prompt)
-            raw = _response_to_text(response)
-            return _parse_brief_and_email(raw)
-        except Exception as e:
-            last_exc = e
-            if isinstance(e, ValueError) and "required" in str(e).lower():
-                raise
-            if not _is_quota_or_rate_limit(e):
-                raise
-            attempt += 1
-            if attempt >= max_attempts:
-                break
-            delay = _retry_delay_seconds(e) * (1.2 ** (attempt - 1))
-            delay = min(delay, 120.0)
-            time.sleep(delay)
-
-    assert last_exc is not None
-    raise last_exc
+    response = client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=2048,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = _response_to_text(response)
+    return _parse_brief_and_email(raw)
 
 
 def generate_content(prompt: str) -> str:
-    """
-    Single-prompt generation (legacy helper). Prefer generate_brief_and_email for /research
-    to minimize API calls. Retries on 429 / quota errors.
-    """
-    # TODO: Add your Gemini API key to the .env file as GEMINI_API_KEY=...
-    api_key = os.getenv("GEMINI_API_KEY")
+    # TODO: Add your Claude API key to backend/.env as ANTHROPIC_API_KEY=...
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise ValueError(
-            "GEMINI_API_KEY is not set. Add it to backend/.env (see TODO in ai_client.py)."
+            "ANTHROPIC_API_KEY is not set. Add it to backend/.env (see TODO in ai_client.py)."
         )
 
-    genai.configure(api_key=api_key)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    model = genai.GenerativeModel(model_name)
-
-    _throttle_free_tier_spacing()
-
-    max_attempts = int(os.getenv("GEMINI_MAX_RETRIES", "6"))
-    attempt = 0
-    last_exc: BaseException | None = None
-
-    while attempt < max_attempts:
-        try:
-            response = model.generate_content(prompt)
-            return _response_to_text(response)
-        except Exception as e:
-            last_exc = e
-            if not _is_quota_or_rate_limit(e):
-                raise
-            attempt += 1
-            if attempt >= max_attempts:
-                break
-            delay = _retry_delay_seconds(e) * (1.2 ** (attempt - 1))
-            delay = min(delay, 120.0)
-            time.sleep(delay)
-
-    assert last_exc is not None
-    raise last_exc
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=2048,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return _response_to_text(response)
