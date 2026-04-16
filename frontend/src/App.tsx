@@ -7,6 +7,7 @@ import {
   type HistoryGroup,
 } from "./components/ResearchHistory";
 import { SearchForm, type TargetType } from "./components/SearchForm";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
@@ -170,25 +171,18 @@ export default function App() {
           )}
 
           {!loading && error && (
-            <div
-              className="rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm text-red-100 shadow-card"
-              role="alert"
+            <Alert
+              variant="destructive"
+              className="border-red-500/40 bg-red-950/40 text-red-100 shadow-card"
             >
-              {error}
-            </div>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
 
           {!loading && !error && brief && email && (
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
               <BriefDisplay content={brief} />
               <EmailDisplay content={email} />
-            </div>
-          )}
-
-          {!loading && !error && (!brief || !email) && (
-            <div className="rounded-xl border border-dashed border-navy-700 bg-navy-900/30 px-6 py-12 text-center text-sm text-slate-500">
-              Enter an outreach effort, target, and click Generate to see the intelligence
-              brief and outreach email side by side.
             </div>
           )}
         </div>

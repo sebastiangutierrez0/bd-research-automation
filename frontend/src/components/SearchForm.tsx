@@ -7,6 +7,19 @@ import type {
 } from "react";
 import { useState } from "react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+
 export type TargetType = "Institutional Investor" | "Target Company";
 
 const MAX_CONTEXT_CHARS = 32000;
@@ -40,6 +53,9 @@ function appendImportedContext(
   }
   return combined;
 }
+
+const fieldClass =
+  "border-navy-600 bg-white text-navy-950 shadow-sm ring-primary/30 placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary";
 
 export function SearchForm({
   outreachEffort,
@@ -133,13 +149,13 @@ export function SearchForm({
       className="rounded-xl border border-navy-700/80 bg-navy-900/60 p-6 shadow-card-lg backdrop-blur"
     >
       <div className="mb-4">
-        <label
+        <Label
           htmlFor="outreach-effort"
-          className="mb-1.5 block text-sm font-medium text-slate-300"
+          className="mb-1.5 block text-slate-300"
         >
           Outreach Effort
-        </label>
-        <input
+        </Label>
+        <Input
           id="outreach-effort"
           type="text"
           value={outreachEffort}
@@ -147,22 +163,22 @@ export function SearchForm({
           placeholder="Name this outreach effort e.g. Fund III Raise, Project Apollo, Series B Outreach"
           autoComplete="off"
           name="outreach-effort"
-          className="w-full rounded-lg border border-navy-600 bg-white px-3 py-2.5 text-sm text-navy-950 shadow-sm outline-none ring-accent/30 placeholder:text-slate-400 focus:border-accent focus:ring-2"
+          className={`h-auto min-h-[42px] py-2.5 ${fieldClass}`}
         />
       </div>
 
       <div className="mb-4">
-        <label
+        <Label
           htmlFor="outreach-context"
-          className="mb-1.5 block text-sm font-medium text-slate-300"
+          className="mb-1.5 block text-slate-300"
         >
           Outreach Effort Context
-        </label>
+        </Label>
 
         <div
           className={`relative overflow-hidden rounded-xl border-2 border-dashed transition-all duration-150 ${
             dragOver
-              ? "border-accent bg-accent/5 shadow-[inset_0_0_0_1px_rgba(79,124,172,0.35)]"
+              ? "border-primary bg-primary/5 shadow-[inset_0_0_0_1px_rgb(79_124_172/0.35)]"
               : "border-navy-500/80 bg-navy-950/30"
           } ${extracting ? "opacity-90" : ""}`}
           onDragEnter={handleDragEnter}
@@ -170,7 +186,6 @@ export function SearchForm({
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          {/* Drop hint strip — always visible, distinct from textarea */}
           <div className="flex items-center gap-2 border-b border-navy-600/60 bg-navy-900/80 px-3 py-2">
             <span className="text-lg leading-none" aria-hidden>
               {dragOver ? "↓" : "📄"}
@@ -185,7 +200,7 @@ export function SearchForm({
                 .pdf · .docx · .txt · .md
               </p>
             </div>
-            <label className="shrink-0 cursor-pointer rounded-lg border border-navy-500 bg-navy-800/90 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-sm transition hover:border-accent hover:bg-navy-700">
+            <label className="shrink-0 cursor-pointer rounded-lg border border-navy-500 bg-navy-800/90 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-sm transition hover:border-primary hover:bg-navy-700">
               Browse files
               <input
                 type="file"
@@ -198,7 +213,7 @@ export function SearchForm({
             </label>
           </div>
 
-          <textarea
+          <Textarea
             id="outreach-context"
             value={outreachContext}
             onChange={(e) => onOutreachContextChange(e.target.value)}
@@ -214,15 +229,15 @@ export function SearchForm({
               }
             }}
             onDrop={handleDrop}
-            className="min-h-[168px] w-full resize-y border-0 bg-white px-3 py-3 text-sm leading-relaxed text-navy-950 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-accent disabled:cursor-wait disabled:bg-slate-50"
+            className="min-h-[168px] w-full resize-y rounded-none border-0 bg-white px-3 py-3 text-sm leading-relaxed text-navy-950 shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-wait disabled:bg-slate-50"
           />
 
           {dragOver ? (
             <div
-              className="pointer-events-none absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 rounded-xl bg-accent/10 backdrop-blur-[1px]"
+              className="pointer-events-none absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 rounded-xl bg-primary/10 backdrop-blur-[1px]"
               aria-hidden
             >
-              <span className="rounded-full bg-accent/20 px-4 py-2 text-sm font-semibold text-white shadow-sm ring-1 ring-accent/40">
+              <span className="rounded-full bg-primary/20 px-4 py-2 text-sm font-semibold text-white shadow-sm ring-1 ring-primary/40">
                 Release to import
               </span>
             </div>
@@ -238,21 +253,21 @@ export function SearchForm({
         </div>
 
         {extractError ? (
-          <p className="mt-2 text-xs text-red-300" role="alert">
-            {extractError}
-          </p>
+          <Alert
+            variant="destructive"
+            className="mt-2 border-red-500/40 bg-red-950/40 text-red-100 [&>svg]:text-red-100"
+          >
+            <AlertDescription>{extractError}</AlertDescription>
+          </Alert>
         ) : null}
       </div>
 
       <div className="flex flex-col gap-4 md:flex-row md:items-end">
         <div className="flex-1">
-          <label
-            htmlFor="target-name"
-            className="mb-1.5 block text-sm font-medium text-slate-300"
-          >
+          <Label htmlFor="target-name" className="mb-1.5 block text-slate-300">
             Target name
-          </label>
-          <input
+          </Label>
+          <Input
             id="target-name"
             type="text"
             value={targetName}
@@ -260,35 +275,38 @@ export function SearchForm({
             placeholder="e.g., CalPERS or Acme Corp"
             autoComplete="off"
             name="target-name"
-            className="w-full rounded-lg border border-navy-600 bg-white px-3 py-2.5 text-sm text-navy-950 shadow-sm outline-none ring-accent/30 placeholder:text-slate-400 focus:border-accent focus:ring-2"
+            className={`h-auto min-h-[42px] py-2.5 ${fieldClass}`}
           />
         </div>
         <div className="w-full md:w-64">
-          <label
-            htmlFor="target-type"
-            className="mb-1.5 block text-sm font-medium text-slate-300"
-          >
+          <Label htmlFor="target-type" className="mb-1.5 block text-slate-300">
             Target type
-          </label>
-          <select
-            id="target-type"
+          </Label>
+          <Select
             value={targetType}
-            onChange={(e) =>
-              onTargetTypeChange(e.target.value as TargetType)
-            }
-            className="w-full rounded-lg border border-navy-600 bg-white px-3 py-2.5 text-sm text-navy-950 shadow-sm outline-none ring-accent/30 focus:border-accent focus:ring-2"
+            onValueChange={(v) => onTargetTypeChange(v as TargetType)}
           >
-            <option value="Institutional Investor">Institutional Investor</option>
-            <option value="Target Company">Target Company</option>
-          </select>
+            <SelectTrigger
+              id="target-type"
+              className={`h-auto min-h-[42px] py-2.5 ${fieldClass}`}
+            >
+              <SelectValue placeholder="Target type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Institutional Investor">
+                Institutional Investor
+              </SelectItem>
+              <SelectItem value="Target Company">Target Company</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <button
+        <Button
           type="submit"
           disabled={submitting || !canSubmit}
-          className="inline-flex h-[42px] shrink-0 items-center justify-center rounded-lg bg-accent px-6 text-sm font-semibold text-white shadow-md transition hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-[42px] shrink-0 px-6 font-semibold shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           Generate
-        </button>
+        </Button>
       </div>
     </form>
   );
